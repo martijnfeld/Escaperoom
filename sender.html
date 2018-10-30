@@ -1,0 +1,388 @@
+
+<!doctype html>
+<!--
+Copyright 2018 Google Inc. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="description" content="Sample illustrating the use of Presentation Receiver API.">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Presentation Receiver API Sample</title>
+    <script>
+      // Add a global error event listener early on in the page load, to help ensure that browsers
+      // which don't support specific functionality still end up displaying a meaningful message.
+      window.addEventListener('error', function(error) {
+        // if (ChromeSamples && ChromeSamples.setStatus) {
+          console.error(error);
+          alert(error.message);
+        //   ChromeSamples.setStatus(error.message + ' (Your browser may not support this feature.)');
+        //   error.preventDefault();
+        // }
+      });
+    </script>
+
+
+
+    <link rel="icon" href="../images/favicon.ico">
+
+    <link rel="stylesheet" href="../styles/main.css">
+
+
+  </head>
+
+  <body>
+
+<p>
+  <button id="start">Verbinden</button>
+</p>
+<p>
+	<fieldset>
+		<legend>Tips</legend>
+		<textarea id="message" type="text" placeholder="Bericht" ></textarea>
+		<button id="sendMessage">Stuur bericht</button>
+	</fieldset>
+</p>
+<p>
+	<fieldset>
+		<legend>Timer instellen</legend>
+		<label for="minuten">Aantal minuten</label>
+		<input id="minuten" type="number" >
+		<button id="sendTimer">Update timer</button>
+	</fieldset>
+</p>
+<p>
+  <button id="close">Verbinding verbreken</button>
+  <button id="terminate">terminate()</button>
+</p>
+<p>
+  <input id="presentationId" type="text" placeholder="Enter a presentation ID...">
+  <button id="reconnect">Reconnect presentationId</button>
+</p>
+
+
+<div id="timer-display">-</div>
+<!-- <h3>Live Output</h3>
+<div id="output" class="output">
+  <div id="content"></div>
+  <div id="status"></div>
+  <pre id="log"></pre>
+</div> -->
+
+
+
+
+<script>
+  // log = ChromeSamples.log;
+</script>
+
+
+
+
+
+      <script>
+const presentationRequest = new PresentationRequest(['receiver.html?v=1']);
+
+
+// Make this presentation the default one when using the "Cast" browser menu.
+navigator.presentation.defaultRequest = presentationRequest;
+
+let presentationConnection;
+var endDate;
+
+document.querySelector('#start').addEventListener('click', function() {
+  // log('Starting presentation request...');
+  presentationRequest.start()
+  .then(connection => {
+    // log('> Connected to ' + connection.url + ', id: ' + connection.id);
+  })
+  .catch(error => {
+    // log('> ' + error.name + ': ' + error.message);
+  });
+});
+
+presentationRequest.addEventListener('connectionavailable', function(event) {
+	console.log('er is iets!', event);
+  presentationConnection = event.connection;
+  presentationConnection.addEventListener('close', function() {
+    // log('> Connection closed.');
+  });
+  presentationConnection.addEventListener('terminate', function() {
+    // log('> Connection terminated.');
+  });
+  presentationConnection.addEventListener('message', function(event) {
+    // log('> ' + event.data);
+	console.log(event);
+	if(event.data){
+		var data = JSON.parse(event.data);
+		if(data.actie == 'syncEndDate'){
+			endDate = new Date(data.endDate);
+		}
+	}
+  });
+});
+
+document.querySelector('#sendMessage').addEventListener('click', function() {
+  const message = document.querySelector('#message').value.trim();
+  const actie = 'tip';
+  const lang = document.body.lang || 'en-US';
+
+  // log('Sending "' + message + '"...');
+  presentationConnection.send(JSON.stringify({message, lang, actie}));
+});
+function pad(num, size) {
+    var s = num+"";
+    while (s.length < size) s = "0" + s;
+    return s;
+}
+document.querySelector('#sendTimer').addEventListener('click', function() {
+	if(endDate){
+		var override = confirm('Weet je zeker dat je de timer wilt overschrijven?');
+	}
+	if((!endDate) || override){
+		var tijd = document.querySelector('#minuten').value.trim();
+		if(isNaN(tijd) || !(tijd > 0)){return;}
+		tijd = tijd * 60;
+		const actie = 'setTimer';
+		const lang = document.body.lang || 'en-US';
+
+		// log('Sending "' + tijd + '"...');
+		presentationConnection.send(JSON.stringify({tijd, lang, actie}));
+	}
+});
+
+document.querySelector('#close').addEventListener('click', function() {
+  // log('Closing connection...');
+  presentationConnection.close();
+});
+
+document.querySelector('#terminate').addEventListener('click', function() {
+  // log('Terminating connection...');
+  presentationConnection.terminate();
+});
+
+document.querySelector('#reconnect').addEventListener('click', () => {
+  const presentationId = document.querySelector('#presentationId').value.trim();
+
+  presentationRequest.reconnect(presentationId)
+  .then(connection => {
+    // log('Reconnected to ' + connection.id);
+  })
+  .catch(error => {
+    // log('Presentation.reconnect() error, ' + error.name + ': ' + error.message);
+  });
+});
+
+/* Availability monitoring */
+
+presentationRequest.getAvailability()
+.then(availability => {
+  // log('Available presentation displays: ' + availability.value);
+  availability.addEventListener('change', function() {
+	  console.log("Available",availability);
+    // log('> Available presentation displays: ' + availability.value);
+  });
+})
+.catch(error => {
+  // log('Presentation availability not supported, ' + error.name + ': ' +
+      // error.message);
+});
+
+var timerDisplay = document.querySelector('#timer-display');
+
+window.setInterval(function () {
+	if(endDate){
+		var now = new Date();
+		var diff = (endDate - now)/1000;
+
+		var minuten = Math.floor(diff/60)
+		var seconden = Math.round(diff%60);
+
+		var string = pad(minuten,2)+':'+pad(seconden,2);
+		timerDisplay.textContent = string;
+	}
+},100);
+
+</script>
+
+
+
+
+    <h3>Controller</h3>
+
+
+
+    <figure class="highlight"><pre><code class="language-js" data-lang="js"><span class="kd">const</span> <span class="nx">presentationRequest</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">PresentationRequest</span><span class="p">([</span><span class="s1">'receiver/index.html'</span><span class="p">]);</span>
+
+<span class="c1">// Make this presentation the default one when using the "Cast" browser menu.</span>
+<span class="nb">navigator</span><span class="p">.</span><span class="nx">presentation</span><span class="p">.</span><span class="nx">defaultRequest</span> <span class="o">=</span> <span class="nx">presentationRequest</span><span class="p">;</span>
+
+<span class="kd">let</span> <span class="nx">presentationConnection</span><span class="p">;</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#start'</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'click'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nx">log</span><span class="p">(</span><span class="s1">'Starting presentation request...'</span><span class="p">);</span>
+  <span class="nx">presentationRequest</span><span class="p">.</span><span class="nx">start</span><span class="p">()</span>
+  <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">connection</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'&gt; Connected to '</span> <span class="o">+</span> <span class="nx">connection</span><span class="p">.</span><span class="nx">url</span> <span class="o">+</span> <span class="s1">', id: '</span> <span class="o">+</span> <span class="nx">connection</span><span class="p">.</span><span class="nx">id</span><span class="p">);</span>
+  <span class="p">})</span>
+  <span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">error</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'&gt; '</span> <span class="o">+</span> <span class="nx">error</span><span class="p">.</span><span class="nx">name</span> <span class="o">+</span> <span class="s1">': '</span> <span class="o">+</span> <span class="nx">error</span><span class="p">.</span><span class="nx">message</span><span class="p">);</span>
+  <span class="p">});</span>
+<span class="p">});</span>
+
+<span class="nx">presentationRequest</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'connectionavailable'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">presentationConnection</span> <span class="o">=</span> <span class="nx">event</span><span class="p">.</span><span class="nx">connection</span><span class="p">;</span>
+  <span class="nx">presentationConnection</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'close'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'&gt; Connection closed.'</span><span class="p">);</span>
+  <span class="p">});</span>
+  <span class="nx">presentationConnection</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'terminate'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'&gt; Connection terminated.'</span><span class="p">);</span>
+  <span class="p">});</span>
+  <span class="nx">presentationConnection</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'message'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'&gt; '</span> <span class="o">+</span> <span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">);</span>
+  <span class="p">});</span>
+<span class="p">});</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#sendMessage'</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'click'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">message</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#message'</span><span class="p">).</span><span class="nx">value</span><span class="p">.</span><span class="nx">trim</span><span class="p">();</span>
+  <span class="kd">const</span> <span class="nx">lang</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">lang</span> <span class="o">||</span> <span class="s1">'en-US'</span><span class="p">;</span>
+
+  <span class="nx">log</span><span class="p">(</span><span class="s1">'Sending "'</span> <span class="o">+</span> <span class="nx">message</span> <span class="o">+</span> <span class="s1">'"...'</span><span class="p">);</span>
+  <span class="nx">presentationConnection</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="nx">message</span><span class="p">,</span> <span class="nx">lang</span><span class="p">}));</span>
+<span class="p">});</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#close'</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'click'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nx">log</span><span class="p">(</span><span class="s1">'Closing connection...'</span><span class="p">);</span>
+  <span class="nx">presentationConnection</span><span class="p">.</span><span class="nx">close</span><span class="p">();</span>
+<span class="p">});</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#terminate'</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'click'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nx">log</span><span class="p">(</span><span class="s1">'Terminating connection...'</span><span class="p">);</span>
+  <span class="nx">presentationConnection</span><span class="p">.</span><span class="nx">terminate</span><span class="p">();</span>
+<span class="p">});</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#reconnect'</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'click'</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">presentationId</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#presentationId'</span><span class="p">).</span><span class="nx">value</span><span class="p">.</span><span class="nx">trim</span><span class="p">();</span>
+
+  <span class="nx">presentationRequest</span><span class="p">.</span><span class="nx">reconnect</span><span class="p">(</span><span class="nx">presentationId</span><span class="p">)</span>
+  <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">connection</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'Reconnected to '</span> <span class="o">+</span> <span class="nx">connection</span><span class="p">.</span><span class="nx">id</span><span class="p">);</span>
+  <span class="p">})</span>
+  <span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">error</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'Presentation.reconnect() error, '</span> <span class="o">+</span> <span class="nx">error</span><span class="p">.</span><span class="nx">name</span> <span class="o">+</span> <span class="s1">': '</span> <span class="o">+</span> <span class="nx">error</span><span class="p">.</span><span class="nx">message</span><span class="p">);</span>
+  <span class="p">});</span>
+<span class="p">});</span>
+
+<span class="cm">/* Availability monitoring */</span>
+
+<span class="nx">presentationRequest</span><span class="p">.</span><span class="nx">getAvailability</span><span class="p">()</span>
+<span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">availability</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="nx">log</span><span class="p">(</span><span class="s1">'Available presentation displays: '</span> <span class="o">+</span> <span class="nx">availability</span><span class="p">.</span><span class="nx">value</span><span class="p">);</span>
+  <span class="nx">availability</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'change'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">log</span><span class="p">(</span><span class="s1">'&gt; Available presentation displays: '</span> <span class="o">+</span> <span class="nx">availability</span><span class="p">.</span><span class="nx">value</span><span class="p">);</span>
+  <span class="p">});</span>
+<span class="p">})</span>
+<span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">error</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="nx">log</span><span class="p">(</span><span class="s1">'Presentation availability not supported, '</span> <span class="o">+</span> <span class="nx">error</span><span class="p">.</span><span class="nx">name</span> <span class="o">+</span> <span class="s1">': '</span> <span class="o">+</span>
+      <span class="nx">error</span><span class="p">.</span><span class="nx">message</span><span class="p">);</span>
+<span class="p">});</span></code></pre></figure>
+
+
+
+
+
+
+
+
+    <h3>Receiver</h3>
+
+
+
+    <figure class="highlight"><pre><code class="language-js" data-lang="js"><span class="kd">let</span> <span class="nx">connectionIdx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">messageIdx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">addConnection</span><span class="p">(</span><span class="nx">connection</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">connection</span><span class="p">.</span><span class="nx">connectionId</span> <span class="o">=</span> <span class="o">++</span><span class="nx">connectionIdx</span><span class="p">;</span>
+  <span class="nx">addMessage</span><span class="p">(</span><span class="s1">'New connection #'</span> <span class="o">+</span> <span class="nx">connectionIdx</span><span class="p">);</span>
+
+  <span class="nx">connection</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'message'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">messageIdx</span><span class="o">++</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">data</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">logString</span> <span class="o">=</span> <span class="s1">'Message '</span> <span class="o">+</span> <span class="nx">messageIdx</span> <span class="o">+</span> <span class="s1">' from connection #'</span> <span class="o">+</span>
+        <span class="nx">connection</span><span class="p">.</span><span class="nx">connectionId</span> <span class="o">+</span> <span class="s1">': '</span> <span class="o">+</span> <span class="nx">data</span><span class="p">.</span><span class="nx">message</span><span class="p">;</span>
+    <span class="nx">addMessage</span><span class="p">(</span><span class="nx">logString</span><span class="p">,</span> <span class="nx">data</span><span class="p">.</span><span class="nx">lang</span><span class="p">);</span>
+    <span class="nx">maybeSetFruit</span><span class="p">(</span><span class="nx">data</span><span class="p">.</span><span class="nx">message</span><span class="p">);</span>
+    <span class="nx">connection</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="s1">'Received message '</span> <span class="o">+</span> <span class="nx">messageIdx</span><span class="p">);</span>
+  <span class="p">});</span>
+
+  <span class="nx">connection</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'close'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">addMessage</span><span class="p">(</span><span class="s1">'Connection #'</span> <span class="o">+</span> <span class="nx">connection</span><span class="p">.</span><span class="nx">connectionId</span> <span class="o">+</span> <span class="s1">' closed, reason = '</span> <span class="o">+</span>
+        <span class="nx">event</span><span class="p">.</span><span class="nx">reason</span> <span class="o">+</span> <span class="s1">', message = '</span> <span class="o">+</span> <span class="nx">event</span><span class="p">.</span><span class="nx">message</span><span class="p">);</span>
+  <span class="p">});</span>
+<span class="p">};</span>
+
+<span class="cm">/* Utils */</span>
+
+<span class="kd">const</span> <span class="nx">fruitEmoji</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s1">'grapes'</span><span class="p">:</span>      <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F347}'</span><span class="p">,</span>
+  <span class="s1">'watermelon'</span><span class="p">:</span>  <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F349}'</span><span class="p">,</span>
+  <span class="s1">'melon'</span><span class="p">:</span>       <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F348}'</span><span class="p">,</span>
+  <span class="s1">'tangerine'</span><span class="p">:</span>   <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F34A}'</span><span class="p">,</span>
+  <span class="s1">'lemon'</span><span class="p">:</span>       <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F34B}'</span><span class="p">,</span>
+  <span class="s1">'banana'</span><span class="p">:</span>      <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F34C}'</span><span class="p">,</span>
+  <span class="s1">'pineapple'</span><span class="p">:</span>   <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F34D}'</span><span class="p">,</span>
+  <span class="s1">'green apple'</span><span class="p">:</span> <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F35F}'</span><span class="p">,</span>
+  <span class="s1">'apple'</span><span class="p">:</span>       <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F34E}'</span><span class="p">,</span>
+  <span class="s1">'pear'</span><span class="p">:</span>        <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F350}'</span><span class="p">,</span>
+  <span class="s1">'peach'</span><span class="p">:</span>       <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F351}'</span><span class="p">,</span>
+  <span class="s1">'cherries'</span><span class="p">:</span>    <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F352}'</span><span class="p">,</span>
+  <span class="s1">'strawberry'</span><span class="p">:</span>  <span class="s1">'</span><span class="err">\</span><span class="s1">u{1F353}'</span>
+<span class="p">};</span>
+
+<span class="kd">function</span> <span class="nx">addMessage</span><span class="p">(</span><span class="nx">content</span><span class="p">,</span> <span class="nx">language</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">listItem</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="s2">"li"</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">language</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">listItem</span><span class="p">.</span><span class="nx">lang</span> <span class="o">=</span> <span class="nx">language</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="nx">listItem</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">content</span><span class="p">;</span>
+  <span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s2">"#message-list"</span><span class="p">).</span><span class="nx">appendChild</span><span class="p">(</span><span class="nx">listItem</span><span class="p">);</span>
+<span class="p">};</span>
+
+<span class="kd">function</span> <span class="nx">maybeSetFruit</span><span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">fruit</span> <span class="o">=</span> <span class="nx">message</span><span class="p">.</span><span class="nx">toLowerCase</span><span class="p">();</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">fruit</span> <span class="k">in</span> <span class="nx">fruitEmoji</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s1">'#main'</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">fruitEmoji</span><span class="p">[</span><span class="nx">fruit</span><span class="p">];</span>
+  <span class="p">}</span>
+<span class="p">};</span>
+
+<span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'DOMContentLoaded'</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nb">navigator</span><span class="p">.</span><span class="nx">presentation</span><span class="p">.</span><span class="nx">receiver</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">navigator</span><span class="p">.</span><span class="nx">presentation</span><span class="p">.</span><span class="nx">receiver</span><span class="p">.</span><span class="nx">connectionList</span><span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">list</span> <span class="o">=&gt;</span> <span class="p">{</span>
+      <span class="nx">list</span><span class="p">.</span><span class="nx">connections</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">connection</span> <span class="o">=&gt;</span> <span class="nx">addConnection</span><span class="p">(</span><span class="nx">connection</span><span class="p">));</span>
+      <span class="nx">list</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'connectionavailable'</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">addConnection</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">connection</span><span class="p">);</span>
+      <span class="p">});</span>
+    <span class="p">});</span>
+  <span class="p">}</span>
+<span class="p">});</span></code></pre></figure>
+
+
+
+
+
+  </body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Demo Receiver</title>
+    <style type="text/css">
+	  *{
+	  	box-sizing: border-box;
+		animation: all 0.3s;
+	  }
+      html, body {
+        height: 100%;
+        margin: 0;
+	}
+		body {
+        font-family: sans-serif;
+        background: radial-gradient(ellipse at center, #333333 0%,#000000 100%);
+        color: #fff;
+      }
+	  body.timer-ended{
+	  	animation: blinkred 1s infinite;
+	  }
+	  @keyframes blinkred {
+	    0% {background: red;}
+	    49% {background: red;}
+	    50% {background: black;}
+	    100% {background: black;}
+	}
+      #center {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+	  }
+	  #main{
+        font-size: 54px;
+		margin-bottom: 0.5em;
+      }
+	  #main:empty{display: none;}
+	  #main:empty + #timer{font-size: 54px;}
+	  #timer{
+	  	transition: font-size 0.3s;
+        font-size: 30px;
+      }
+    </style>
+  </head>
+  <body>
+	  <div id="center">
+		  <div id="main"></div>
+		  <div id="timer"></div>
+	  </div>
+	<script type="text/javascript">
+	let connectionIdx = 0;
+	let messageIdx = 0;
+
+	var timerDiv = document.getElementById('timer')
+
+	var pling = new Audio('pling.mp3');
+	var sirene = new Audio('sirene.mp3');
+
+	var connections = [];
+	function addConnection(connection) {
+		connection.connectionId = ++connectionIdx;
+		// addMessage('New connection #' + connectionIdx);
+		connections.push(connection);
+		var index = connections.length - 1
+
+		connection.addEventListener('message', function(event) {
+			// messageIdx++;
+			const data = JSON.parse(event.data);
+			if(data.actie == 'tip'){
+				// const logString = 'Message ' + messageIdx + ' from connection #' +
+				// 	connection.connectionId + ': ' + data.message;
+				// addMessage(logString, data.lang);
+				// connection.send('Received message ' + messageIdx);
+				document.querySelector('#main').innerHTML = data.message.replace(/\n/g,'<br />');
+				// document.querySelector("#main").innerHtml = data.message;
+				// document.querySelector('#main2').textContent = 'pling?';
+				if(data.message.trim() != ''){
+					// document.querySelector('#main2').textContent = 'pling!';
+					try {
+						// pling.play();
+						if(pling.paused){
+							pling.play();
+						}
+						else{
+							pling.currentTime = 0
+						}
+						// document.querySelector('#main2').textContent = 'plingde!!!';
+					}
+					catch(err) {
+						// document.getElementById("demo").innerHTML =;
+						// document.querySelector('#main2').textContent =  err.message;
+					}
+				}
+
+			}
+			else if (data.actie == 'setTimer') {
+				setTimer(data.tijd)
+			}
+		});
+
+		connection.addEventListener('close', function(event) {
+			document.querySelector("#main").innerHtml = 'Verbinding verbroken!! reason = ' +
+			event.reason + ', message = ' + event.message;
+
+			connections[index] = null;
+		});
+
+		if(endDate){
+			const message = document.querySelector('#message').value.trim();
+			const actie = 'tip';
+			const lang = document.body.lang || 'en-US';
+
+			// log('Sending "' + message + '"...');
+			presentationConnection.send(JSON.stringify({message, lang, actie}));
+		}
+	};
+
+	var prevInterval;
+	var endDate;
+	function setTimer(tijd) {
+		// window.clearInterval(prevInterval);
+		endDate = new Date();
+		endDate.setSeconds(endDate.getSeconds() + tijd);
+
+		if(!sirene.paused){
+			sirene.pause();
+			sirene.currentTime = 0;
+		}
+
+		connections.forEach(sendEndDate)
+	}
+
+	function sendEndDate(connection) {
+		if(connection && connection.send && endDate){
+			const actie = 'syncEndDate';
+
+			// log('Sending "' + message + '"...');
+			connection.send(JSON.stringify({endDate, actie}));
+		}
+	}
+
+	window.setInterval(function () {
+		if(endDate){
+			var now = new Date();
+			var diff = (endDate - now)/1000;
+
+			var minuten = Math.floor(diff/60)
+			var seconden = Math.round(diff%60);
+
+			var string = pad(minuten,2)+':'+pad(seconden,2);
+
+			if(minuten < 0 && seconden <= 0){
+				endDate = undefined;
+				string = '00:00';
+				try {
+					// pling.play();
+					if(sirene.paused){
+						sirene.play();
+					}
+					else{
+						sirene.currentTime = 0
+					}
+					document.body.className = 'timer-ended';
+					// TODO: sendMessage
+					// document.querySelector('#main2').textContent = 'plingde!!!';
+				}
+				catch(err) {
+					// document.getElementById("demo").innerHTML =;
+					// document.querySelector('#main2').textContent =  err.message;
+				}
+			}
+			console.log(string);
+			timerDiv.textContent = string
+		}
+	},100);
+
+	function pad(num, size) {
+		var s = num+"";
+		while (s.length < size) s = "0" + s;
+		return s;
+	}
+
+	document.addEventListener('DOMContentLoaded', function() {
+		if (navigator.presentation.receiver) {
+			navigator.presentation.receiver.connectionList.then(list => {
+				list.connections.map(connection => addConnection(connection));
+				list.addEventListener('connectionavailable', function(event) {
+					addConnection(event.connection);
+				});
+			});
+		}
+	});
+</script>
+    <!-- <div id="main2">??</div> -->
+    <!-- <ul id="message-list">
+    </ul> -->
+  </body>
+</html>
