@@ -1,0 +1,26 @@
+{
+	"videoButtons": [
+		{
+			"name": "intro",
+			"key": "intro",
+			"file": "videos/intro.mp4"
+		},
+
+		{
+			"name": "Tussenstuk 1: zwarte gat",
+			"key": "tussen_1_zwarte_gat",
+			"file": "videos/tussen_1_zwarte_gat.mp4"
+		},
+		{
+			"name": "Tussenstuk 2: kijk me aan",
+			"key": "tussen_2_kijk_me_aan",
+			"file": "videos/tussen_2_kijk_me_aan.mp4"
+		},
+
+		{
+			"name": "outro",
+			"key": "outro",
+			"file": "videos/outro.mp4"
+		}
+	]
+}

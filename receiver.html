@@ -20,6 +20,14 @@
 	  body.timer-ended{
 	  	animation: blinkred 1s infinite;
 	  }
+		video {
+			position: fixed;
+			top: 0;
+			left: 0;
+			background: #000;
+			width: 100%;
+			height: 100%;
+		}
 	  @keyframes blinkred {
 	    0% {background: red;}
 	    49% {background: red;}
@@ -50,21 +58,32 @@
 		  <div id="main"></div>
 		  <div id="timer"></div>
 	  </div>
+		<div id="video-container"></div>
 	<script type="text/javascript">
+	window.onerror = function(e){
+		if(connections){
+				connections.forEach(function (connection) {
+					connection.send(JSON.stringify({type: "windowerror", event: e}));
+				})
+		}
+	}
 	let connectionIdx = 0;
 	let messageIdx = 0;
 
 	var timerDiv = document.getElementById('timer')
+	var videoContainer = document.getElementById('video-container')
 
 	var pling = new Audio('pling.mp3');
 	var sirene = new Audio('sirene.mp3');
+
+	var playingVideo;
 
 	var connections = [];
 	function addConnection(connection) {
 		connection.connectionId = ++connectionIdx;
 		// addMessage('New connection #' + connectionIdx);
 		connections.push(connection);
-		var index = connections.length - 1
+		var index = connections.length - 1;
 
 		connection.addEventListener('message', function(event) {
 			// messageIdx++;
@@ -95,6 +114,22 @@
 					}
 				}
 
+			}
+			else if (data.actie == 'stopvideo') {
+				stopVideo()
+			}
+			else if (data.actie == 'video') {
+				if(data.videoType == 'buttons'){
+					// document.querySelector('#main').innerHTML = 'video '+data.key
+					videoObj = videos.videoButtons.find(xVideo => xVideo.key == data.key);
+					stopVideo()
+					playingVideo = videoObj;
+
+
+					playingVideo.elem.currentTime = 0;
+					playingVideo.elem.play();
+					playingVideo.elem.style.display = 'block';
+				}
 			}
 			else if (data.actie == 'setTimer') {
 				setTimer(data.tijd)
@@ -177,6 +212,74 @@
 		}
 	},100);
 
+	var videos;
+	async function initVideos () {
+		const response = await fetch('videos.json?t='+new Date().getTime());
+		videos = await response.json();
+
+		if(videos.startvideo){
+			videos.startvideo.elem = createVideo(videos.startvideo.file, 'fixed_startvideo');
+		}
+		if(videos.tijdopvideo){
+			videos.tijdopvideo.elem = createVideo(videos.tijdopvideo.file, 'fixed_tijdopvideo');
+		}
+		if(videos.videoButtons){
+			videos.videoButtons.forEach(videoObj => {
+
+				videoObj.elem = createVideo(videoObj.file, videoObj.key);
+			});
+		}
+		connections.forEach(connection => {
+			connection.send(JSON.stringify({actie: "videosinit"}));
+		})
+	}
+
+	function createVideo(url,key) {
+		var video = document.createElement('video');
+		video.src = url;
+		video.autoplay = false;
+
+		video.onerror = function (e) {
+				connections.forEach(connection => {
+					connection.send(JSON.stringify({key: key, event: e, actie: "video_error"}));
+				})
+		}
+		video.oncanplay = function (e) {
+				connections.forEach(connection => {
+					connection.send(JSON.stringify({key: key, event: e, actie: "video_canplay"}));
+				})
+		}
+		video.onended = function () {
+				connections.forEach(connection => {
+					connection.send(JSON.stringify({key: key, actie: "video_ended"}));
+				})
+				stopVideo();
+		}
+		video.onplay = function () {
+				connections.forEach(connection => {
+					connection.send(JSON.stringify({key: key, actie: "video_started"}));
+				})
+		}
+
+
+		video.load();
+		video.style = "display: none;"
+
+		videoContainer.appendChild(video);
+
+		return video;
+	}
+	function stopVideo() {
+		if(playingVideo){
+			connections.forEach(connection => {
+				connection.send(JSON.stringify({key: playingVideo.key, actie: "video_ended"}));
+			})
+			playingVideo.elem.pause();
+			playingVideo.elem.style.display = 'none';
+		}
+		playingVideo = undefined;
+	}
+
 	function pad(num, size) {
 		var s = num+"";
 		while (s.length < size) s = "0" + s;
@@ -193,6 +296,7 @@
 			});
 		}
 	});
+	initVideos();
 </script>
     <!-- <div id="main2">??</div> -->
     <!-- <ul id="message-list">

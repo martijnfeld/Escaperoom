@@ -47,6 +47,13 @@
 	</fieldset>
 </p>
 <p>
+	<fieldset>
+		<legend>Videos</legend>
+		<div id="video-panel"></div>
+		<button id="video-stop">Stop video</button>
+	</fieldset>
+</p>
+<p>
   <button id="close">Verbinding verbreken</button>
   <button id="terminate">terminate()</button>
 </p>
@@ -66,8 +73,10 @@
 
 
       <script>
-const presentationRequest = new PresentationRequest(['receiver.html?v=1']);
-
+const presentationRequest = new PresentationRequest(['receiver.html?v=1&t='+new Date().getTime()]);
+presentationRequest.onconnectionavailable = function () {
+	console.log(arguments)
+}
 
 // Make this presentation the default one when using the "Cast" browser menu.
 navigator.presentation.defaultRequest = presentationRequest;
@@ -86,6 +95,11 @@ document.querySelector('#start').addEventListener('click', function() {
   });
 });
 
+function getVideoObjByKey(key) {
+	console.log(key)
+	return videos.videoButtons.find(xVideo => xVideo.key == key);
+}
+
 presentationRequest.addEventListener('connectionavailable', function(event) {
 	console.log('er is iets!', event);
   presentationConnection = event.connection;
@@ -103,10 +117,30 @@ presentationRequest.addEventListener('connectionavailable', function(event) {
 		if(data.actie == 'syncEndDate'){
 			endDate = new Date(data.endDate);
 		}
+		else if(data.actie == 'video_error'){
+			videoObj = getVideoObjByKey(data.key);
+			videoObj.button.disabled = true;
+			videoObj.button.style.backgroundColor = 'red';
+		}
+		else if(data.actie == 'video_canplay'){
+			videoObj = getVideoObjByKey(data.key);
+			videoObj.button.disabled = false;
+		}
+		else if(data.actie == 'video_ended'){
+			videoObj = getVideoObjByKey(data.key);
+			videoObj.button.style.backgroundColor = null;
+		}
+		else if(data.actie == 'video_started'){
+			videoObj = getVideoObjByKey(data.key);
+			videoObj.button.style.backgroundColor = 'green';
+		}
 	}
   });
 });
 
+document.querySelector('#video-stop').addEventListener('click', function() {
+	presentationConnection.send(JSON.stringify({actie: 'stopvideo'}));
+});
 document.querySelector('#sendMessage').addEventListener('click', function() {
   const message = document.querySelector('#message').value.trim();
   const actie = 'tip';
@@ -188,6 +222,52 @@ window.setInterval(function () {
 	}
 },100);
 
+
+
+var videoPanel = document.querySelector('#video-panel');
+	var videos;
+	async function initVideos () {
+		const response = await fetch('videos.json?t='+new Date().getTime());
+		videos = await response.json();
+
+
+		// if(videos.startvideo){
+		// 	videos.startvideo.elem = createVideo(videos.startvideo.file);
+		// }
+		// if(videos.tijdopvideo){
+		// 	videos.tijdopvideo.elem = createVideo(videos.tijdopvideo.file);
+		// }
+		if(videos.videoButtons){
+			videos.videoButtons.forEach((video) => {
+				video.button = document.createElement('button');
+				video.button.setAttribute("type", "button");
+				video.button.dataset.key = video.key;
+				video.button.dataset.videoType = 'buttons';
+				video.button.innerText = video.name
+				video.button.disabled = true
+				video.button.addEventListener('click',function () {
+					var type = this.dataset.videoType;
+					var key = this.dataset.key;
+
+					var videoObj;
+					if(type == 'buttons'){
+						videoObj = videos.videoButtons.find(xVideo => xVideo.key == key);
+					}
+
+					if(videoObj){
+				  	presentationConnection.send(JSON.stringify({key: key, videoType: "buttons", actie: "video"}));
+						console.log("sended",key)
+					}
+					else{
+						alert("video niet gevonden")
+					}
+				});
+				videoPanel.appendChild(video.button);
+			});
+			// videos.videoButtons.elem = createVideo(videos.videoButtons.file);
+		}
+	}
+	initVideos();
 </script>
 
 
